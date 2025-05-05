@@ -12,61 +12,69 @@ struct Node {
     int key;
     Node* left;
     Node* right;
-    Node(int k);
+
+    Node(int k) {
+        key = k;
+        left = right = nullptr;
+    }
 };
 
 class RBST {
-
 public:
     RBST();
     void insert(int key);
     int searchCount(int key);
+
 private:
     Node* root;
-    Node* insert(Node* node, int key);
-    Node* insertRoot(Node* node, int key);
-    Node* rotateLeft(Node* node);
-    Node* rotateRight(Node* node);
 
+    Node* insert(Node* n, int key);
+    Node* insertAtRoot(Node* n, int key);
+    Node* rotateL(Node* n);
+    Node* rotateR(Node* n);
 };
 
-Node::Node(int k) : key(k), left(nullptr), right(nullptr) {}
+RBST::RBST() {
+    root = nullptr;
+}
 
-RBST::RBST() : root(nullptr) {}
-
-Node* RBST::rotateLeft(Node* p) {
+Node* RBST::rotateL(Node* p) {
     Node* q = p->right;
+    if (!q) return p;
     p->right = q->left;
     q->left = p;
     return q;
 }
 
-Node* RBST::rotateRight(Node* p) {
+Node* RBST::rotateR(Node* p) {
     Node* q = p->left;
+    if (!q) return p;
     p->left = q->right;
     q->right = p;
     return q;
 }
 
-Node* RBST::insertRoot(Node* node, int key) {
-    if (!node) return new Node(key);
-    if (key < node->key) {
-        node->left = insertRoot(node->left, key);
-        return rotateRight(node);
+Node* RBST::insertAtRoot(Node* n, int key) {
+    if (!n) return new Node(key);
+
+    if (key < n->key) {
+        n->left = insertAtRoot(n->left, key);
+        return rotateR(n);
     } else {
-        node->right = insertRoot(node->right, key);
-        return rotateLeft(node);
+        n->right = insertAtRoot(n->right, key);
+        return rotateL(n);
     }
 }
 
-Node* RBST::insert(Node* node, int key) {
-    if (!node) return new Node(key);
-    if (rand() % 2) return insertRoot(node, key);
-    if (key < node->key)
-        node->left = insert(node->left, key);
+Node* RBST::insert(Node* n, int key) {
+    if (!n) return new Node(key);
+    if (rand() % 2) return insertAtRoot(n, key);
+
+    if (key < n->key)
+        n->left = insert(n->left, key);
     else
-        node->right = insert(node->right, key);
-    return node;
+        n->right = insert(n->right, key);
+    return n;
 }
 
 void RBST::insert(int key) {
@@ -74,57 +82,66 @@ void RBST::insert(int key) {
 }
 
 int RBST::searchCount(int key) {
-    Node* current = root;
-    int count = 0;
-    while (current) {
-        count++;
-        if (current->key == key) break;
-        current = (key < current->key) ? current->left : current->right;
+    Node* curr = root;
+    int steps = 0;
+    while (curr) {
+        steps++;
+        if (curr->key == key) break;
+        curr = (key < curr->key) ? curr->left : curr->right;
     }
-    return count;
+    return steps;
 }
 
 int main() {
     srand(time(nullptr));
     vector<int> sizes = {5000000, 10000000, 20000000, 50000000};
-    ofstream out("rbst_results.csv");
-    out << "n,RBST_exist,RBST_missing\n";
 
-    random_device rd;
-    mt19937 gen(rd());
-
-    for (int n : sizes) {
-        vector<int> data(n);
-        for (int i = 0; i < n; i++) data[i] = i;
-        shuffle(data.begin(), data.end(), gen);
-
-        RBST rbst;
-        for (int i = 0; i < n; i++) rbst.insert(data[i]);
-
-        uniform_int_distribution<> dist_exist(0, n - 1);
-        uniform_int_distribution<> dist_missing(n, 2 * n);
-
-        int total_rbst_exist = 0, total_rbst_missing = 0;
-
-        for (int i = 0; i < 500000; i++) {
-            int key_exist = data[dist_exist(gen)];
-            int key_missing = dist_missing(gen);
-
-            total_rbst_exist += rbst.searchCount(key_exist);
-            total_rbst_missing += rbst.searchCount(key_missing);
-        }
-
-        double avg_rbst_exist = total_rbst_exist / 500000.0;
-        double avg_rbst_missing = total_rbst_missing / 500000.0;
-
-        cout << "n=" << n
-                  << " RBST: exist=" << avg_rbst_exist << ", missing=" << avg_rbst_missing << endl;
-
-        out << n << ","
-            << avg_rbst_exist << "," << avg_rbst_missing << "\n";
+    ofstream fout("rbst_results.csv");
+    if (!fout.is_open()) {
+        cerr << "File err.\n";
+        return 1;
     }
 
-    out.close();
+    fout << "n,RBST_exist,RBST_missing\n";
+
+    random_device rd;
+    mt19937 rng(rd());
+
+    for (int n : sizes) {
+        cout << "Working on size: " << n << endl;
+
+        vector<int> values(n);
+        for (int i = 0; i < n; ++i)
+            values[i] = i;
+
+        shuffle(values.begin(), values.end(), rng);
+
+        RBST tree;
+        for (int x : values)
+            tree.insert(x);
+
+        uniform_int_distribution<> pickExist(0, n - 1);
+        uniform_int_distribution<> pickMissing(n, 2 * n);
+
+        int steps_exist = 0, steps_miss = 0;
+
+        for (int i = 0; i < 500000; ++i) {
+            int foundKey = values[pickExist(rng)];
+            int notFoundKey = pickMissing(rng);
+
+            steps_exist += tree.searchCount(foundKey);
+            steps_miss += tree.searchCount(notFoundKey);
+        }
+
+        double avg_exist = steps_exist / 500000.0;
+        double avg_miss = steps_miss / 500000.0;
+
+        cout << "n=" << n << " --> found=" << avg_exist
+             << ", not found=" << avg_miss << endl;
+
+        fout << n << "," << avg_exist << "," << avg_miss << "\n";
+    }
+
+    fout.close();
     return 0;
 }
-
