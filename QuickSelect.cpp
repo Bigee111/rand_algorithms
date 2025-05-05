@@ -5,84 +5,85 @@
 #include <chrono>
 #include <fstream>
 
-int partition(std::vector<int>& arr, int left, int right) {
-    int pivotIndex = left + rand() % (right - left + 1);
-    int pivotValue = arr[pivotIndex];
-    std::swap(arr[pivotIndex], arr[right]);
-    int storeIndex = left;
+int doPartition(std::vector<int>& data, int l, int r) {
+    int pIdx = l + std::rand() % (r - l + 1);
+    int pivot = data[pIdx];
+    std::swap(data[pIdx], data[r]);
 
-    for (int i = left; i < right; ++i) {
-        if (arr[i] < pivotValue) {
-            std::swap(arr[i], arr[storeIndex]);
-            ++storeIndex;
+    int sIdx = l;
+    for (int i = l; i < r; ++i) {
+        if (data[i] < pivot) {
+            std::swap(data[i], data[sIdx]);
+            ++sIdx;
         }
     }
-    std::swap(arr[storeIndex], arr[right]);
-    return storeIndex;
+    std::swap(data[sIdx], data[r]);
+    return sIdx;
 }
 
-int quickselect(std::vector<int>& arr, int k) {
-    int left = 0, right = arr.size() - 1;
-    k = k - 1;
+int quickSelect(std::vector<int>& data, int k) {
+    int lo = 0, hi = data.size() - 1;
 
-    while (left <= right) {
-        int pivotIndex = partition(arr, left, right);
-        if (pivotIndex == k) return arr[pivotIndex];
-        else if (pivotIndex < k) left = pivotIndex + 1;
-        else right = pivotIndex - 1;
+    while (lo <= hi) {
+        int idx = doPartition(data, lo, hi);
+        if (idx == k) return data[idx];
+        else if (idx < k) lo = idx + 1;
+        else hi = idx - 1;
     }
 
     return -1;
 }
 
-void benchmark(int size, std::ofstream& outFile) {
-    std::cout << "Generating array of size " << size << "...\n";
-    std::vector<int> baseArray(size);
-    std::mt19937 rng(std::random_device{}());
-    std::uniform_int_distribution<int> distValue(1, 1e9);
+void runBenchmark(int N, std::ofstream& fout) {
+    std::cout << "Preparing " << N << " elements...\n";
+    std::vector<int> values(N);
 
-    for (int& x : baseArray) x = distValue(rng);
+    std::mt19937 gen(std::random_device{}());
+    std::uniform_int_distribution<int> dist(1, 1000000000); //1e9
 
-    std::uniform_int_distribution<int> distK(1, size);
+    for (int i = 0; i < N; ++i)
+        values[i] = dist(gen);
 
-    std::cout << "Running 1000 Quickselects...\n";
-    long long total_time_ns = 0;
+    std::uniform_int_distribution<int> kDist(1, N);
+    long long total_ns = 0;
 
-    for (int i = 0; i < 1000; ++i) {
-        int k = distK(rng);
-        std::vector<int> tempArray = baseArray;
+    std::cout << "Running quickselects...\n";
+    for (int i = 1; i <= 1000; ++i) {
+        int k = kDist(gen);
 
-        auto start = std::chrono::high_resolution_clock::now();
-        quickselect(tempArray, k);
-        auto end = std::chrono::high_resolution_clock::now();
+        std::vector<int> tmp(values);
 
-        total_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+        auto t0 = std::chrono::high_resolution_clock::now();
+        quickSelect(tmp, k);
+        auto t1 = std::chrono::high_resolution_clock::now();
 
-        if ((i + 1) % 100 == 0)
-            std::cout << "  Completed " << (i + 1) << " queries\n";
+        total_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
+
+        if (i % 100 == 0)
+            std::cout << "   [" << i << "/1000] done\n";
     }
 
-    double avg_ms = total_time_ns / 1000.0 / 1e6;
-    std::cout << "Average time for size " << size << ": " << avg_ms << " ms\n\n";
+    double avg_ms = total_ns / 1e6 / 1000.0;
+    std::cout << "Avg time for " << N << ": " << avg_ms << " ms\n\n";
 
-    outFile << size << "," << avg_ms << "\n";
+    fout << N << "," << avg_ms << "\n";
 }
 
 int main() {
-    std::vector<int> sizes = {10'000'000, 20'000'000, 40'000'000, 80'000'000, 160'000'000};
-    std::ofstream outFile("quickselect_results.csv");
+    std::vector<int> testSizes = {10000000, 20000000, 40000000, 80000000, 160000000};
 
-    if (!outFile) {
-        std::cerr << "Failed to open output file!\n";
+    std::ofstream fout("quickselect_results.csv");
+    if (!fout.is_open()) {
+        std::cerr << "Couldn't open output file\n";
         return 1;
     }
 
-    outFile << "Size,AverageTimeMs\n";
+    fout << "Size,AvgTimeMs\n";
 
-    for (int size : sizes) {
-        benchmark(size, outFile);
+    for (int n : testSizes) {
+        runBenchmark(n, fout);
     }
 
-    outFile.close();
+    fout.close();
     return 0;
 }
