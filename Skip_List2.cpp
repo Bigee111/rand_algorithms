@@ -1,143 +1,154 @@
 #include <iostream>
-#include <cstdlib>
-#include <ctime>
+#include <fstream>
 #include <vector>
 #include <climits>
-#include <fstream>
+#include <cstdlib>
+#include <ctime>
 #include <random>
 #include <algorithm>
 
 using namespace std;
 
-class SkipListNode {
-public:
-    int value;
-    vector<SkipListNode*> forward;
+struct Node {
+    int val;
+    vector<Node*> next;
 
-    SkipListNode(int val, int level) : value(val), forward(level + 1, nullptr) {}
+    Node(int v, int lvl) : val(v), next(lvl + 1, nullptr) {}
 };
 
 class SkipList {
-    int maxLevel;
-    float probability;
-    int currentLevel;
-    SkipListNode* head;
-
-    int randomLevel() {
-        int level = 0;
-        while ((float)rand() / RAND_MAX < probability && level < maxLevel)
-            level++;
-        return level;
-    }
-
 public:
-    SkipList(int maxLevel, float probability)
-        : maxLevel(maxLevel), probability(probability), currentLevel(0) {
-        head = new SkipListNode(INT_MIN, maxLevel);
-        srand(time(nullptr));
-    }
+    SkipList(int maxLvl, float p);
+    ~SkipList();
 
-    void insert(int value) {
-        vector<SkipListNode*> update(maxLevel + 1);
-        SkipListNode* current = head;
+    void insert(int val);
+    bool search(int val, int& steps);
 
-        for (int i = currentLevel; i >= 0; i--) {
-            while (current->forward[i] && current->forward[i]->value < value)
-                current = current->forward[i];
-            update[i] = current;
-        }
+private:
+    int maxLvl;
+    float p;
+    int currLvl;
+    Node* head;
 
-        current = current->forward[0];
-
-        if (!current || current->value != value) {
-            int rlevel = randomLevel();
-
-            if (rlevel > currentLevel) {
-                for (int i = currentLevel + 1; i <= rlevel; i++)
-                    update[i] = head;
-                currentLevel = rlevel;
-            }
-
-            SkipListNode* newNode = new SkipListNode(value, rlevel);
-            for (int i = 0; i <= rlevel; i++) {
-                newNode->forward[i] = update[i]->forward[i];
-                update[i]->forward[i] = newNode;
-            }
-        }
-    }
-
-    bool search(int value, int& nodesVisited) {
-        SkipListNode* current = head;
-        //nodesVisited = 0;
-
-        for (int i = currentLevel; i >= 0; i--) {
-            while (current->forward[i] && current->forward[i]->value < value) {
-                current = current->forward[i];
-                nodesVisited++;
-            }
-            nodesVisited++;
-        }
-
-        current = current->forward[0];
-        if (current && current->value == value) {
-            nodesVisited++;
-            return true;
-        }
-        return false;
-    }
-
-    ~SkipList() {
-        SkipListNode* current = head;
-        while (current) {
-            SkipListNode* next = current->forward[0];
-            delete current;
-            current = next;
-        }
-    }
+    int randLevel();
 };
 
+SkipList::SkipList(int maxLvl, float p)
+    : maxLvl(maxLvl), p(p), currLvl(0) {
+    head = new Node(INT_MIN, maxLvl);
+    srand(time(0));
+}
 
+int SkipList::randLevel() {
+    int lvl = 0;
+    while ((float)rand() / RAND_MAX < p && lvl < maxLvl)
+        ++lvl;
+    return lvl;
+}
+
+void SkipList::insert(int val) {
+    vector<Node*> prev(maxLvl + 1);
+    Node* x = head;
+
+    for (int i = currLvl; i >= 0; --i) {
+        while (x->next[i] && x->next[i]->val < val)
+            x = x->next[i];
+        prev[i] = x;
+    }
+
+    x = x->next[0];
+
+    if (!x || x->val != val) {
+        int lvl = randLevel();
+
+        if (lvl > currLvl) {
+            for (int i = currLvl + 1; i <= lvl; ++i)
+                prev[i] = head;
+            currLvl = lvl;
+        }
+
+        Node* newNode = new Node(val, lvl);
+        for (int i = 0; i <= lvl; ++i) {
+            newNode->next[i] = prev[i]->next[i];
+            prev[i]->next[i] = newNode;
+        }
+    }
+}
+
+bool SkipList::search(int val, int& steps) {
+    Node* x = head;
+
+    for (int i = currLvl; i >= 0; --i) {
+        while (x->next[i] && x->next[i]->val < val) {
+            x = x->next[i];
+            ++steps;
+        }
+        ++steps;
+    }
+
+    x = x->next[0];
+    if (x && x->val == val) {
+        ++steps;
+        return true;
+    }
+    return false;
+}
+
+SkipList::~SkipList() {
+    Node* curr = head;
+    while (curr) {
+        Node* nxt = curr->next[0];
+        delete curr;
+        curr = nxt;
+    }
+}
 
 int main() {
-    srand(time(nullptr));
-    vector<int> sizes = {5000000, 10000000, 20000000, 50000000};
-    ofstream out("skip_list_results2.csv");
-    out << "n,exist,missing\n";
+    srand(time(0));
+    vector<int> sizes = {5'000'000, 10'000'000, 20'000'000, 50'000'000};
+
+    ofstream out("skiplist_bench.csv");
+    if (!out) {
+        cerr << "File err.\n";
+        return 1;
+    }
+
+    out << "n,avg_found,avg_not_found\n";
 
     random_device rd;
-    mt19937 gen(rd());
+    mt19937 rng(rd());
 
     for (int n : sizes) {
         vector<int> data(n);
-        for (int i = 0; i < n; i++) data[i] = i;
-        shuffle(data.begin(), data.end(), gen);
+        for (int i = 0; i < n; ++i)
+            data[i] = i;
 
-        SkipList sl(25, 0.25);
-        for (int i = 0; i < n; i++) sl.insert(data[i]);
+        shuffle(data.begin(), data.end(), rng);
 
-        uniform_int_distribution<> dist_exist(0, n - 1);
-        uniform_int_distribution<> dist_missing(n, 2 * n);
+        SkipList sl(50, 0.25);
+        for (int x : data)
+            sl.insert(x);
 
-        int total_skip_exist = 0, total_skip_missing = 0;
+        uniform_int_distribution<> pick_in(0, n - 1);
+        uniform_int_distribution<> pick_out(n, 2 * n);
 
-        for (int i = 0; i < 500000; i++) {
-            int key_exist = data[dist_exist(gen)];
-            int key_missing = dist_missing(gen);
+        int steps_in = 0, steps_out = 0;
 
-            sl.search(key_exist, total_skip_exist);
-            sl.search(key_missing, total_skip_missing);
+        for (int i = 0; i < 500000; ++i) {
+            int k_in = data[pick_in(rng)];
+            int k_out = pick_out(rng);
+
+            sl.search(k_in, steps_in);
+            sl.search(k_out, steps_out);
         }
 
-        double avg_skip_exist = total_skip_exist / 500000.0;
-        double avg_skip_missing = total_skip_missing / 500000.0;
+        double avg_in = steps_in / 500000.0;
+        double avg_out = steps_out / 500000.0;
 
-        cout << "n=" << n << " exist=" << avg_skip_exist << ", missing=" << avg_skip_missing
-                  << endl;
-
-        out << n << ","
-            << avg_skip_exist << "," << avg_skip_missing << "\n";
+        cout << "n=" << n << " avg_in=" << avg_in << " avg_out=" << avg_out << "\n";
+        out << n << "," << avg_in << "," << avg_out << "\n";
     }
-    out.close();
 
+    out.close();
     return 0;
 }
