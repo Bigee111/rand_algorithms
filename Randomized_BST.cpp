@@ -10,11 +10,13 @@ using namespace std;
 
 struct Node {
     int key;
+    int priority;
     Node* left;
     Node* right;
 
-    Node(int k) {
+    Node(int k, int p) {
         key = k;
+        priority = p;
         left = right = nullptr;
     }
 };
@@ -27,15 +29,16 @@ public:
 
 private:
     Node* root;
+    mt19937 rng;
 
-    Node* insert(Node* n, int key);
-    Node* insertAtRoot(Node* n, int key);
+    Node* insert(Node* n, int key, int priority);
     Node* rotateL(Node* n);
     Node* rotateR(Node* n);
 };
 
-RBST::RBST() {
-    root = nullptr;
+RBST::RBST() : root(nullptr) {
+    random_device rd;
+    rng.seed(rd());
 }
 
 Node* RBST::rotateL(Node* p) {
@@ -54,31 +57,24 @@ Node* RBST::rotateR(Node* p) {
     return q;
 }
 
-Node* RBST::insertAtRoot(Node* n, int key) {
-    if (!n) return new Node(key);
+Node* RBST::insert(Node* n, int key, int priority) {
+    if (!n) return new Node(key, priority);
 
     if (key < n->key) {
-        n->left = insertAtRoot(n->left, key);
-        return rotateR(n);
+        n->left = insert(n->left, key, priority);
+        if (n->left->priority > n->priority)
+            n = rotateR(n);
     } else {
-        n->right = insertAtRoot(n->right, key);
-        return rotateL(n);
+        n->right = insert(n->right, key, priority);
+        if (n->right->priority > n->priority)
+            n = rotateL(n);
     }
-}
-
-Node* RBST::insert(Node* n, int key) {
-    if (!n) return new Node(key);
-    if (rand() % 2) return insertAtRoot(n, key);
-
-    if (key < n->key)
-        n->left = insert(n->left, key);
-    else
-        n->right = insert(n->right, key);
     return n;
 }
 
 void RBST::insert(int key) {
-    root = insert(root, key);
+    int priority = uniform_int_distribution<>(1, INT32_MAX)(rng);
+    root = insert(root, key, priority);
 }
 
 int RBST::searchCount(int key) {
@@ -93,16 +89,15 @@ int RBST::searchCount(int key) {
 }
 
 int main() {
-    srand(time(nullptr));
     vector<int> sizes = {5000000, 10000000, 20000000, 50000000};
 
-    ofstream fout("rbst_results.csv");
+    ofstream fout("treap_results.csv");
     if (!fout.is_open()) {
         cerr << "File err.\n";
         return 1;
     }
 
-    fout << "n,RBST_exist,RBST_missing\n";
+    fout << "n,existing,missing\n";
 
     random_device rd;
     mt19937 rng(rd());
